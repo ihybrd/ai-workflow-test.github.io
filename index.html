@@ -3,10 +3,156 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello</title>
+  <title>Cube</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #f4f1e9;
+      color: #24251f;
+      font-family: system-ui, sans-serif;
+    }
+
+    main { width: min(100%, 480px); }
+    header { border-bottom: 1px solid #ccc9bf; padding-bottom: 20px; }
+    h1 { margin: 0; font-size: clamp(36px, 8vw, 56px); letter-spacing: -0.06em; }
+    p { margin: 8px 0 0; color: #66675e; font-size: 14px; }
+
+    .scene {
+      --size: clamp(130px, 40vw, 190px);
+      --half: calc(var(--size) / 2);
+      height: clamp(300px, 70vw, 400px);
+      display: grid;
+      place-items: center;
+      perspective: 800px;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: grab;
+    }
+
+    .scene:active { cursor: grabbing; }
+    .scene:focus-visible { outline: 2px solid #24251f; outline-offset: 4px; }
+
+    .view, .cube {
+      width: var(--size);
+      height: var(--size);
+      transform-style: preserve-3d;
+      pointer-events: none;
+    }
+
+    /* A fixed viewing tilt reveals the top; interaction changes only Y. */
+    .view { transform: rotateX(-18deg); }
+    .cube { transform: rotateY(30deg); }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      border: 2px solid #24251f;
+      backface-visibility: hidden;
+      font-size: 48px;
+      font-weight: 600;
+    }
+
+    .front { background: #f3a966; transform: translateZ(var(--half)); }
+    .back { background: #e28259; transform: rotateY(180deg) translateZ(var(--half)); }
+    .right { background: #c3cba8; transform: rotateY(90deg) translateZ(var(--half)); }
+    .left { background: #b3c9d1; transform: rotateY(-90deg) translateZ(var(--half)); }
+    .top { background: #f7d49e; transform: rotateX(90deg) translateZ(var(--half)); }
+    .bottom { background: #c4b3cf; transform: rotateX(-90deg) translateZ(var(--half)); }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid #ccc9bf;
+      padding-top: 16px;
+      color: #66675e;
+      font: 12px ui-monospace, monospace;
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello</h1>
-  <p>Why do programmers prefer dark mode? Because light attracts bugs.</p>
+  <main>
+    <header>
+      <h1>Cube.</h1>
+      <p id="instructions">Drag left or right to rotate. One axis, nothing else.</p>
+    </header>
+    <div class="scene" id="scene" tabindex="0" role="slider"
+      aria-label="Cube rotation" aria-describedby="instructions"
+      aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="359"
+      aria-valuenow="30" aria-valuetext="30 degrees">
+      <div class="view" aria-hidden="true">
+        <div class="cube" id="cube">
+          <div class="face front">01</div>
+          <div class="face back">02</div>
+          <div class="face right">03</div>
+          <div class="face left">04</div>
+          <div class="face top">05</div>
+          <div class="face bottom">06</div>
+        </div>
+      </div>
+    </div>
+    <footer>
+      <span>Y-AXIS ONLY</span>
+      <output id="angle" aria-hidden="true">030&deg;</output>
+    </footer>
+  </main>
+  <script>
+    const scene = document.getElementById('scene');
+    const cube = document.getElementById('cube');
+    const angle = document.getElementById('angle');
+    let rotation = 30;
+    let pointerId = null;
+    let startX = 0;
+    let startRotation = 0;
+
+    function render(value) {
+      rotation = ((value % 360) + 360) % 360;
+      cube.style.transform = `rotateY(${rotation}deg)`;
+      const degrees = Math.round(rotation) % 360;
+      angle.textContent = `${String(degrees).padStart(3, '0')}\u00b0`;
+      scene.setAttribute('aria-valuenow', String(degrees));
+      scene.setAttribute('aria-valuetext', `${degrees} degrees`);
+    }
+
+    scene.addEventListener('pointerdown', (event) => {
+      if (!event.isPrimary || event.button !== 0 || pointerId !== null) return;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startRotation = rotation;
+      scene.setPointerCapture(pointerId);
+    });
+
+    scene.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== pointerId) return;
+      render(startRotation + (event.clientX - startX) * 0.6);
+    });
+
+    function endDrag(event) {
+      if (event.pointerId !== pointerId) return;
+      if (scene.hasPointerCapture(pointerId)) scene.releasePointerCapture(pointerId);
+      pointerId = null;
+    }
+
+    scene.addEventListener('pointerup', endDrag);
+    scene.addEventListener('pointercancel', endDrag);
+    scene.addEventListener('lostpointercapture', endDrag);
+
+    scene.addEventListener('keydown', (event) => {
+      if (pointerId !== null) return;
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === 'Home') render(0);
+      else if (event.key === 'End') render(359);
+      else render(rotation + (event.key === 'ArrowRight' ? 10 : -10));
+    });
+  </script>
 </body>
 </html>
