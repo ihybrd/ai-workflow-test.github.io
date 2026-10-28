@@ -82,7 +82,7 @@
   <main>
     <header>
       <h1>Cube.</h1>
-      <p id="instructions">Drag left or right to rotate. One axis, nothing else.</p>
+      <p id="instructions">Drag to rotate. Release to coast gently to a stop.</p>
     </header>
     <div class="scene" id="scene" tabindex="0" role="slider"
       aria-label="Cube rotation" aria-describedby="instructions"
@@ -108,10 +108,16 @@
     const scene = document.getElementById('scene');
     const cube = document.getElementById('cube');
     const angle = document.getElementById('angle');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let rotation = 30;
     let pointerId = null;
     let startX = 0;
     let startRotation = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let velocity = 0;
+    let animationFrame = null;
+    let lastFrame = 0;
 
     function render(value) {
       rotation = ((value % 360) + 360) % 360;
@@ -122,23 +128,57 @@
       scene.setAttribute('aria-valuetext', `${degrees} degrees`);
     }
 
+    function stopInertia() {
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      velocity = 0;
+    }
+
+    function coast(time) {
+      // Integrate exponential friction by elapsed time, not frame count.
+      const decay = Math.exp(-(time - lastFrame) / 240);
+      render(rotation + velocity * 240 * (1 - decay));
+      velocity *= decay;
+      lastFrame = time;
+      if (Math.abs(velocity) > 0.005) {
+        animationFrame = requestAnimationFrame(coast);
+      } else {
+        stopInertia();
+      }
+    }
+
     scene.addEventListener('pointerdown', (event) => {
       if (!event.isPrimary || event.button !== 0 || pointerId !== null) return;
+      stopInertia();
       pointerId = event.pointerId;
       startX = event.clientX;
       startRotation = rotation;
+      lastX = event.clientX;
+      lastTime = event.timeStamp;
       scene.setPointerCapture(pointerId);
     });
 
     scene.addEventListener('pointermove', (event) => {
       if (event.pointerId !== pointerId) return;
+      const elapsed = Math.max(1, event.timeStamp - lastTime);
+      velocity = Math.max(-1.5, Math.min(1.5, (event.clientX - lastX) * 0.6 / elapsed));
+      lastX = event.clientX;
+      lastTime = event.timeStamp;
       render(startRotation + (event.clientX - startX) * 0.6);
     });
 
     function endDrag(event) {
       if (event.pointerId !== pointerId) return;
-      if (scene.hasPointerCapture(pointerId)) scene.releasePointerCapture(pointerId);
+      const releasedPointer = pointerId;
       pointerId = null;
+      if (scene.hasPointerCapture(releasedPointer)) scene.releasePointerCapture(releasedPointer);
+      if (event.type === 'pointerup' && event.timeStamp - lastTime <= 80 &&
+          Math.abs(velocity) > 0.005 && !reducedMotion.matches && !document.hidden) {
+        lastFrame = performance.now();
+        animationFrame = requestAnimationFrame(coast);
+      } else {
+        stopInertia();
+      }
     }
 
     scene.addEventListener('pointerup', endDrag);
@@ -149,9 +189,17 @@
       if (pointerId !== null) return;
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
+      stopInertia();
       if (event.key === 'Home') render(0);
       else if (event.key === 'End') render(359);
       else render(rotation + (event.key === 'ArrowRight' ? 10 : -10));
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stopInertia();
+    });
+    reducedMotion.addEventListener('change', () => {
+      if (reducedMotion.matches) stopInertia();
     });
   </script>
 </body>
